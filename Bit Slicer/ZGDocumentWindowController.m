@@ -65,6 +65,7 @@
 #import "ZGNullability.h"
 #import "ZGCalculator.h"
 #import <libproc.h>
+#import <mach-o/loader.h>
 #import <Security/CodeSigning.h>
 #import <Security/SecCode.h>
 
@@ -1714,9 +1715,15 @@
 			// We failed to grant access to this process the user is trying to search in
 			// Notify the user why this may be the case
 			dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-				BOOL isProtectedByEntitlement = [self isCurrentProcessProtectedByEntitlement];
+				BOOL isIOSApp = [self isCurrentProcessAnIOSApp];
+				BOOL isProtectedByEntitlement = !isIOSApp && [self isCurrentProcessProtectedByEntitlement];
 				dispatch_async(dispatch_get_main_queue(), ^{
-					if (isProtectedByEntitlement)
+					if (isIOSApp)
+					{
+						// iOS apps on Apple silicon can't be debugged, and disabling system protections won't help since the app then won't launch
+						ZGRunAlertPanelWithOKButton(ZGLocalizableSearchDocumentString(@"searchFailureAlertTitle"), [NSString stringWithFormat:ZGLocalizableSearchDocumentString(@"searchFailureIOSAppAlertMessageFormat"), self.currentProcess.name]);
+					}
+					else if (isProtectedByEntitlement)
 					{
 						ZGRunAlertPanelWithOKButtonAndHelp(ZGLocalizableSearchDocumentString(@"searchFailureAlertTitle"), [NSString stringWithFormat:ZGLocalizableSearchDocumentString(@"searchFailureSystemProtectionAlertMessageFormat"), self.currentProcess.name], self);
 					}
@@ -1769,6 +1776,24 @@
 		}
 	}
 	return NO;
+}
+
+- (BOOL)isCurrentProcessAnIOSApp
+{
+	char pathBuffer[PROC_PIDPATHINFO_MAXSIZE] = {0};
+	int numberOfBytesRead = proc_pidpath(self.currentProcess.processID, pathBuffer, sizeof(pathBuffer));
+	if (numberOfBytesRead <= 0)
+	{
+		return NO;
+	}
+
+	NSString *executablePath = [NSString stringWithUTF8String:pathBuffer];
+	if (executablePath == nil)
+	{
+		return NO;
+	}
+
+	return [ZGProcess executablePlatformAtPath:executablePath] == PLATFORM_IOS;
 }
 
 // Show help for being unable to search likely due to security protections

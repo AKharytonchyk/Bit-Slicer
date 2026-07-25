@@ -76,6 +76,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (BOOL)hasGrantedAccess;
 
+// Reads the Mach-O platform (a PLATFORM_* value from <mach-o/loader.h>) that the executable
+// at the given path targets, e.g. PLATFORM_MACOS or PLATFORM_IOS. Returns 0 if it can't be read.
++ (uint32_t)executablePlatformAtPath:(NSString *)executablePath;
+
 - (ZGMemorySize)pointerSize;
 
 @end
